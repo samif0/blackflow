@@ -147,8 +147,8 @@ jobs:
         # Copy all necessary files
         scp -r scripts/* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/scripts/
         scp -r nginx/* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/nginx/
-        scp -r auth-service ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/
         scp docker-compose.prod.yml docker-compose.staging.yml ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/
+        scp -r auth-service ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/services
         
         # Create docker-compose.merged.yml on the server
         ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'cd ~/app && chmod +x ./scripts/deploy/*.sh ./scripts/nginx/*.sh ./scripts/cleanup/*.sh && ./scripts/deploy/create-docker-compose.sh'

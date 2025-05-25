@@ -60,7 +60,7 @@ services:
 
   auth-service:
     build:
-      context: ./auth-service
+      context: ./services/auth-service
       dockerfile: Dockerfile
     expose:
       - "8080"

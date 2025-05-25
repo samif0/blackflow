@@ -39,7 +39,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 A Go-based authentication service runs in its own container, only accessible to backend and nginx containers via the internal Docker network. External clients cannot call the auth service directly; instead, requests to `/api/auth/*` are proxied by nginx to the auth service.
 
-- Service code: `auth-service/`
+- Service code: `services/auth-service/`
 - Internal port: 8080
 - Not exposed to the public internet
-- Add your authentication logic in `auth-service/main.go`
+- Add your authentication logic in `services/auth-service/main.go`

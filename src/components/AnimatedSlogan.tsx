@@ -1,7 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
-import { animate, stagger } from "motion";
-import { splitText } from "motion-plus";
+import { motion } from "framer-motion";
 
 interface AnimatedSloganProps {
   text: string;
@@ -9,30 +7,53 @@ interface AnimatedSloganProps {
 }
 
 export default function AnimatedSlogan({ text, className }: AnimatedSloganProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const words = text.split(" ");
 
-  useEffect(() => {
-    document.fonts.ready.then(() => {
-      if (!containerRef.current) return;
-      containerRef.current.style.visibility = "visible";
-      const { words } = splitText(
-        containerRef.current.querySelector("h1")!
-      );
-      animate(
-        words,
-        { opacity: [0, 1], y: [10, 0] },
-        {
-          type: "tween", // or "spring", "inertia"
-          duration: 2.75,
-          delay: stagger(0.15),
-        }
-      );
-    });
-  }, [text]);
+  const container = {
+    hidden: { opacity: 0 },
+    visible: (i = 1) => ({
+      opacity: 1,
+      transition: { staggerChildren: 0.15, delayChildren: 0.04 * i },
+    }),
+  };
+
+  const child = {
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        type: "tween",
+        duration: 0.5,
+      },
+    },
+    hidden: {
+      opacity: 0,
+      y: 10,
+      transition: {
+        type: "tween", 
+        duration: 0.5,
+      },
+    },
+  };
 
   return (
-    <div className={`text-center ${className || ""}`} ref={containerRef} style={{ visibility: "hidden" }}>
-      <h1 className="h1">{text}</h1>
-    </div>
+    <motion.div
+      className={`text-center ${className || ""}`}
+      variants={container}
+      initial="hidden"
+      animate="visible"
+    >
+      <h1 className="h1">
+        {words.map((word, index) => (
+          <motion.span
+            key={index}
+            variants={child}
+            style={{ display: "inline-block", marginRight: "0.25em" }}
+          >
+            {word}
+          </motion.span>
+        ))}
+      </h1>
+    </motion.div>
   );
 }

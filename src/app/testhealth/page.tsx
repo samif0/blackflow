@@ -1,22 +1,29 @@
-"use client"; // Add this at the top
-import React from 'react';
-
+"use client";
+import React, { useState } from 'react';
 
 export default function TestHealth() {
+  const [healthData, setHealthData] = useState<{ status: string; timestamp: string } | null>(null);
+
   const handleClick = () => {
     console.log("Button clicked");
-    fetch('/api/auth/health')
+    fetch('/api/health')
       .then(res => res.json())
-      .then(data =>
-        <p>
-          {data.status} {data.message}
-        </p>
-      )
+      .then(data => {
+        setHealthData(data);
+      })
+      .catch(err => {
+        console.error('Error fetching health data:', err);
+      });
   };
 
   return (
     <div>
       <button onClick={handleClick}>Click me</button>
+      {healthData && (
+        <p>
+          Status: {healthData.status} - Timestamp: {healthData.timestamp}
+        </p>
+      )}
     </div>
   );
 }

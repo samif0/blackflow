@@ -18,6 +18,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    networks:
+      - backend
 
   blackflow-staging:
     build:
@@ -36,6 +38,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    networks:
+      - backend
 
   blackflow-dev:
     build:
@@ -49,6 +53,8 @@ services:
     environment: 
       - NODE_ENV=development
     command: npm run dev
+    networks:
+      - backend
 
   auth-service:
     build:

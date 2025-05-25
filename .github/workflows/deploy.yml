@@ -34,11 +34,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Ensure all scripts are in Unix (LF) format on EC2
-      run: |
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'sudo apt-get update && sudo apt-get install -y dos2unix'
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'find ~/app -type f -name "*.sh" -exec dos2unix {} \;'
     
     - name: Install SSH Key
       uses: shimataro/ssh-key-action@v2
@@ -48,6 +43,11 @@ jobs:
         known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
         if_key_exists: replace
     
+    - name: Ensure all scripts are in Unix (LF) format on EC2
+      run: |
+        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'sudo apt-get update && sudo apt-get install -y dos2unix'
+        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'find ~/app -type f -name "*.sh" -exec dos2unix {} \;'
+
     - name: Create environment files
       run: |
         # Create staging environment file

@@ -19,7 +19,7 @@ services:
       retries: 3
       start_period: 20s
     networks:
-      - backend
+      - frontend
 
   blackflow-staging:
     build:
@@ -39,7 +39,7 @@ services:
       retries: 3
       start_period: 20s
     networks:
-      - backend
+      - frontend
 
   blackflow-dev:
     build:
@@ -54,7 +54,7 @@ services:
       - NODE_ENV=development
     command: npm run dev
     networks:
-      - backend
+      - frontend
 
   auth-service:
     build:
@@ -80,8 +80,11 @@ services:
       - blackflow-staging
       - auth-service
     networks:
+      - frontend
       - backend
 
 networks:
+  frontend:
+    driver: bridge
   backend:
     driver: bridge

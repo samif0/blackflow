@@ -18,6 +18,7 @@ services:
       - blackflow-staging
       - auth-service
     networks:
+      - frontend
       - backend
     restart: unless-stopped
 
@@ -30,7 +31,7 @@ services:
     environment: 
       - NODE_ENV=production
     networks:
-      - backend
+      - frontend
     restart: unless-stopped
 
   blackflow-staging:
@@ -42,7 +43,7 @@ services:
     environment: 
       - NODE_ENV=staging
     networks:
-      - backend
+      - frontend
     restart: unless-stopped
 
   blackflow-dev:
@@ -54,7 +55,7 @@ services:
     environment: 
       - NODE_ENV=development
     networks:
-      - backend
+      - frontend
     restart: unless-stopped
 
   auth-service:
@@ -68,6 +69,8 @@ services:
     restart: unless-stopped
 
 networks:
+  frontend:
+    driver: bridge
   backend:
     driver: bridge
 EOF

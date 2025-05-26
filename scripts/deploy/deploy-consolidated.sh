@@ -86,7 +86,10 @@ fi
 # Build and deploy with Docker Compose
 echo "Building and starting containers..."
 if [ -f "docker-compose.merged.yml" ] && [ -f "docker-compose.prod.yml" ]; then
-  docker-compose -f docker-compose.merged.yml -f docker-compose.prod.yml up -d --build
+  # Build with no cache to ensure latest code is used
+  docker-compose -f docker-compose.merged.yml -f docker-compose.prod.yml build --no-cache
+  # Then start the containers
+  docker-compose -f docker-compose.merged.yml -f docker-compose.prod.yml up -d
 else
   echo "ERROR: Required docker-compose files not found"
   exit 1

@@ -38,31 +38,31 @@ export default function BlackFlowNavbar() {
 				{navLinks.map((link) => (
 					<li key={link.href} className="relative">
 						{/* Link container with hover state management */}
-						<motion.a
-							href={link.href}
-							className="relative inline-block cursor-pointer px-3 pb-1 pt-2 hover:text-emerald-400"
-							initial="rest"
-							whileHover="hover"
-							animate="rest"
-						>
-							{/* Link text */}
-							<span className="relative z-10">{link.label}</span>
+                        <motion.a
+                            href={link.href}
+                            className="relative inline-block cursor-pointer px-3 pb-1 pt-2 hover:text-[rgb(255, 255, 255)]"
+                            initial="rest"
+                            whileHover="hover"
+                            animate="rest"
+                        >
+                            {/* Link text */}
+                            <span className="relative z-10">{link.label}</span>
 
-							{/* Underline animation element */}
-							<motion.span
-								className="absolute left-0 -bottom-[2px] w-full h-[1px] bg-emerald-400 rounded z-0"
-								variants={{
-									rest: { scaleX: 0 }, // Hidden state
-									hover: { scaleX: 1 }, // Visible state on hover
-								}}
-								transition={{
-									type: "tween",
-									duration: 0.4,
-									ease: [0.4, 0, 0.2, 1], // Custom easing for smooth animation
-								}}
-								style={{ originX: 0 }} // Animate from left to right
-							/>
-						</motion.a>
+                            {/* Underline animation element */}
+                            <motion.span
+                                className="absolute left-0 -bottom-[2px] w-full h-[1px] bg-[rgb(124,58,237)] rounded z-0"
+                                variants={{
+                                    rest: { scaleX: 0 }, // Hidden state
+                                    hover: { scaleX: 1 }, // Visible state on hover
+                                }}
+                                transition={{
+                                    type: "tween",
+                                    duration: 0.4,
+                                    ease: [0.4, 0, 0.2, 1], // Custom easing for smooth animation
+                                }}
+                                style={{ originX: 0.5 }} // Animate from center outwards
+                            />
+                        </motion.a>
 					</li>
 				))}
 			</ul>

@@ -32,7 +32,7 @@ export default function AnimatedSlogan({ text, className }: AnimatedSloganProps)
 
   return (
     <div className={`text-center ${className || ""}`} ref={containerRef} style={{ visibility: "hidden" }}>
-      <h1 className="h1">{text}</h1>
+      <h1 className="tracking-tighter text-4xl ">{text}</h1>
     </div>
   );
 }

@@ -1,8 +1,0 @@
-version: '3'
-services:
-  blackflow-prod:
-    environment:
-      - NODE_ENV=production
-      - API_URL=
-      - AUTH_SECRET=
-      - DATABASE_URL=

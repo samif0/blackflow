@@ -9,6 +9,7 @@
     "lint": "next lint --dir src"
   },
   "dependencies": {
+    "framer-motion": "^12.12.2",
     "motion": "^12.12.2",
     "motion-plus": "^0.1.9",
     "next": "15.3.1",

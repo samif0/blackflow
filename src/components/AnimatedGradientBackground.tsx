@@ -74,7 +74,7 @@ export default function AnimatedGradientBackground({
             rgba(111, 71, 86, 1) 94%,
             rgba(113, 72, 87, 1) 96%,
             rgba(115, 73, 88, 1) 98%,
-            rgba(124, 58, 237, 1) 100%
+            rgb(0, 0, 0) 100%
           )`
         }}
       />
@@ -86,8 +86,8 @@ export default function AnimatedGradientBackground({
           background: `radial-gradient(
             ellipse at center,
             transparent 0%,
-            rgba(147, 51, 234, 0.1) 40%,
-            rgba(124, 58, 237, 0.3) 100%
+            rgba(78, 0, 233, 0.1) 40%,
+            rgba(93, 0, 255, 0.3) 100%
           )`
         }}
       />

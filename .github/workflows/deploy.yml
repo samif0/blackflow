@@ -1,9 +1,13 @@
-name: CI/CD Deployment Pipeline
+name: Build and Deploy with Robust Setup
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
   test:
@@ -20,153 +24,496 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci 
+        run: npm ci
       
       - name: Run tests
         run: npm test || echo "No tests available yet"
-  
-  deploy-consolidated:
-    name: Deploy to Consolidated Environment
+
+  build-and-push:
+    name: Build and Push Images
     needs: test
     runs-on: ubuntu-latest
-    environment: production
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install SSH Key
-      uses: shimataro/ssh-key-action@v2
-      with:
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        name: id_ed25519
-        known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
-        if_key_exists: replace
-    
-    - name: Ensure all scripts are in Unix (LF) format on EC2
-      run: |
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'sudo apt-get update && sudo apt-get install -y dos2unix'
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'find ~/app -type f -name "*.sh" -exec dos2unix {} \;'
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+            network=host
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      
+      - name: Generate build metadata
+        id: meta
+        run: |
+          echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+          echo "sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+      
+      - name: Build and push production image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/blackflow:prod-latest
+            ${{ secrets.DOCKER_USERNAME }}/blackflow:prod-${{ steps.meta.outputs.date }}-${{ steps.meta.outputs.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/blackflow:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/blackflow:buildcache,mode=max
+          build-args: |
+            NODE_ENV=production
+            BUILDKIT_INLINE_CACHE=1
+      
+      - name: Build and push staging image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/blackflow:staging-latest
+            ${{ secrets.DOCKER_USERNAME }}/blackflow:staging-${{ steps.meta.outputs.date }}-${{ steps.meta.outputs.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/blackflow:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/blackflow:buildcache,mode=max
+          build-args: |
+            NODE_ENV=staging
+            BUILDKIT_INLINE_CACHE=1
+      
+      - name: Build and push auth service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/auth-service
+          file: ./services/auth-service/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/blackflow-auth:latest
+            ${{ secrets.DOCKER_USERNAME }}/blackflow-auth:${{ steps.meta.outputs.date }}-${{ steps.meta.outputs.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/blackflow-auth:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/blackflow-auth:buildcache,mode=max
 
-    - name: Create environment files
-      run: |
-        # Create staging environment file
-        echo "version: '3'" > docker-compose.staging.yml
-        echo "services:" >> docker-compose.staging.yml
-        echo "  blackflow-staging:" >> docker-compose.staging.yml
-        echo "    environment:" >> docker-compose.staging.yml
-        echo "      - NODE_ENV=staging" >> docker-compose.staging.yml
-        echo "      - API_URL=${STAGING_API_URL}" >> docker-compose.staging.yml
-        echo "      - AUTH_SECRET=${STAGING_AUTH_SECRET}" >> docker-compose.staging.yml
-        echo "      - DATABASE_URL=${STAGING_DATABASE_URL}" >> docker-compose.staging.yml
-        
-        # Create production environment file
-        echo "version: '3'" > docker-compose.prod.yml
-        echo "services:" >> docker-compose.prod.yml
-        echo "  blackflow-prod:" >> docker-compose.prod.yml
-        echo "    environment:" >> docker-compose.prod.yml
-        echo "      - NODE_ENV=production" >> docker-compose.prod.yml
-        echo "      - API_URL=${PROD_API_URL}" >> docker-compose.prod.yml
-        echo "      - AUTH_SECRET=${PROD_AUTH_SECRET}" >> docker-compose.prod.yml
-        echo "      - DATABASE_URL=${PROD_DATABASE_URL}" >> docker-compose.prod.yml
-      env:
-        STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
-        STAGING_AUTH_SECRET: ${{ secrets.STAGING_AUTH_SECRET }}
-        STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-        PROD_API_URL: ${{ secrets.PROD_API_URL }}
-        PROD_AUTH_SECRET: ${{ secrets.PROD_AUTH_SECRET }}
-        PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-    
-    - name: Configure Nginx with domain
-      run: |
-        mkdir -p nginx/conf.d
-        
-        export DOMAIN_NAME="${{ secrets.DOMAIN_NAME }}"
-        export STAGING_DOMAIN_NAME="staging.${{ secrets.DOMAIN_NAME }}"
-        
-        chmod +x scripts/nginx/create-nginx-conf.sh scripts/nginx/create-server-blocks.sh
-        ./scripts/nginx/create-nginx-conf.sh
-        
-        cat > scripts/nginx/domain-variables.sh << EOF
-        #!/bin/bash
-        export DOMAIN_NAME="$DOMAIN_NAME"
-        export STAGING_DOMAIN_NAME="$STAGING_DOMAIN_NAME"
-        EOF
-        chmod +x scripts/nginx/domain-variables.sh
-        
-        ./scripts/nginx/create-server-blocks.sh
-    
-    - name: Ensure app directory exists
-      run: |
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'mkdir -p ~/app/nginx/ssl'
-    
-    - name: Check if initial setup is needed
-      id: check-setup
-      run: |
-        SETUP_NEEDED=$(ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "if [ -f ~/app/docker-compose.merged.yml ]; then echo 'false'; else echo 'true'; fi")
-        echo "setup_needed=$SETUP_NEEDED" >> $GITHUB_OUTPUT
-        
-        # Check if SSL certs exist and aren't expiring soon
-        SSH_OUTPUT=$(ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "if [ -f ~/app/scripts/ssl/check-ssl-certs.sh ]; then chmod +x ~/app/scripts/ssl/check-ssl-certs.sh && ~/app/scripts/ssl/check-ssl-certs.sh; else if [ -f ~/app/nginx/ssl/cert.pem ] && [ -f ~/app/nginx/ssl/key.pem ]; then echo 'Certificates exist but expiration unknown'; else echo 'SSL certificates not found'; fi; fi")
-        CERT_CODE=$?
-        
-        # Determine if SSL setup is needed based on both existence and expiration
-        if [ $CERT_CODE -eq 0 ]; then
-          SSL_SETUP_NEEDED="false"
-          echo "SSL certificates exist and are valid for more than 7 days"
-        else
-          SSL_SETUP_NEEDED="true"
-          echo "SSL certificates don't exist or will expire soon: $SSH_OUTPUT"
-        fi
-        echo "ssl_setup_needed=$SSL_SETUP_NEEDED" >> $GITHUB_OUTPUT
+  deploy:
+    name: Deploy to EC2
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          name: id_ed25519
+          known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          if_key_exists: replace
+      
+      - name: Create robust deployment script
+        run: |
+          cat > deploy-robust.sh << 'DEPLOY_SCRIPT'
+#!/bin/bash
+# Robust deployment script with full setup checks
 
-    - name: Setup or renew SSL certificates if needed
-      if: steps.check-setup.outputs.ssl_setup_needed == 'true'
-      run: |
-        echo "SSL certificates setup or renewal needed..."
-        chmod +x scripts/ssl/certbot-setup.sh scripts/ssl/check-ssl-certs.sh scripts/ssl/renew-ssl-certs.sh scripts/ssl/manage-ssl-certs.sh
-        
-        # Copy all SSL management scripts to the server
-        scp scripts/ssl/*.sh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/
-        
-        # Make sure app/scripts/ssl directory exists
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'mkdir -p ~/app/scripts/ssl'
-        
-        # Run the SSL management script
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} './manage-ssl-certs.sh ${{ secrets.DOMAIN_NAME }} ${{ secrets.STAGING_DOMAIN_NAME }} ${{ secrets.CERTBOT_EMAIL }}'
-        
-        # Copy the SSL management scripts to the app directory for future use
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'cp ~/manage-ssl-certs.sh ~/check-ssl-certs.sh ~/renew-ssl-certs.sh ~/app/scripts/ssl/'
-  
-  
-    - name: Setup consolidated environment
-      run: |
-        # Create necessary directories on server
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'mkdir -p ~/app/scripts/deploy ~/app/scripts/nginx ~/app/scripts/cleanup ~/app/nginx/conf.d ~/app/nginx/ssl'
-        
-        # Copy all necessary files
-        scp -r scripts/* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/scripts/
-        scp -r nginx/* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/nginx/
-        scp docker-compose.prod.yml docker-compose.staging.yml ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/
-        scp -r services/auth-service ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/app/
-        
-        # Create docker-compose.merged.yml on the server
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'cd ~/app && chmod +x ./scripts/deploy/*.sh ./scripts/nginx/*.sh ./scripts/cleanup/*.sh && ./scripts/deploy/create-docker-compose.sh'
-        
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'cd ~/app && ./scripts/cleanup/cleanup-docker.sh && if [ ! -d "blackflow" ]; then git clone https://github.com/samif0/blackflow.git blackflow; else cd blackflow && git fetch && git pull origin main && cd ..; fi && docker-compose -f docker-compose.merged.yml -f docker-compose.prod.yml build --no-cache blackflow-prod && docker-compose -f docker-compose.merged.yml -f docker-compose.staging.yml build --no-cache blackflow-staging && docker-compose -f docker-compose.merged.yml -f docker-compose.prod.yml -f docker-compose.staging.yml up -d'
-        
-        # Clean up
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'cd ~/app && docker image prune -af --force'
- 
-    - name: Set up automated SSL certificate checks
-      run: |
-        # Create a cron job to check and renew certificates daily
-        ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} '(crontab -l 2>/dev/null || true; echo "0 3 * * * ~/app/scripts/ssl/manage-ssl-certs.sh") | crontab -'
-        echo "Set up daily SSL certificate check at 3 AM"
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Configuration
+APP_DIR="${HOME}/app"
+DOMAIN_NAME="${DOMAIN_NAME:-blackflowlabs.com}"
+STAGING_DOMAIN_NAME="staging.${DOMAIN_NAME}"
+LETSENCRYPT_DIR="/etc/letsencrypt/live/${DOMAIN_NAME}"
+
+# Logging functions
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Create directory structure
+log_info "Creating directory structure..."
+mkdir -p "${APP_DIR}"/{nginx/{conf.d,ssl},scripts/{deploy,monitor,cleanup,nginx,ssl},logs,blackflow}
+
+# Handle Git repository
+log_info "Managing Git repository..."
+cd "${APP_DIR}"
+
+if [ -d "blackflow/.git" ]; then
+    log_info "Updating existing repository..."
+    cd blackflow
+    git fetch origin
+    git checkout main || git checkout -b main origin/main
+    git reset --hard origin/main
+    cd ..
+else
+    log_info "Cloning repository..."
+    rm -rf blackflow
+    git clone https://github.com/samif0/blackflow.git blackflow
+fi
+
+# Handle SSL certificates
+log_info "Managing SSL certificates..."
+CERT_DEST="${APP_DIR}/nginx/ssl/cert.pem"
+KEY_DEST="${APP_DIR}/nginx/ssl/key.pem"
+
+if [ -f "${LETSENCRYPT_DIR}/fullchain.pem" ] && [ -f "${LETSENCRYPT_DIR}/privkey.pem" ]; then
+    log_info "Copying Let's Encrypt certificates..."
+    sudo cp "${LETSENCRYPT_DIR}/fullchain.pem" "${CERT_DEST}"
+    sudo cp "${LETSENCRYPT_DIR}/privkey.pem" "${KEY_DEST}"
+    sudo chown $USER:$USER "${CERT_DEST}" "${KEY_DEST}"
+    sudo chmod 600 "${CERT_DEST}" "${KEY_DEST}"
+    log_success "SSL certificates copied"
+else
+    log_warning "Let's Encrypt certificates not found"
+    if [ ! -f "${CERT_DEST}" ] || [ ! -f "${KEY_DEST}" ]; then
+        log_warning "Creating self-signed certificates..."
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "${KEY_DEST}" -out "${CERT_DEST}" \
+            -subj "/CN=${DOMAIN_NAME}" 2>/dev/null
+        chmod 600 "${KEY_DEST}" "${CERT_DEST}"
+    fi
+fi
+
+# Docker login
+if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_TOKEN" ]; then
+    log_info "Logging into Docker Hub..."
+    echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
+fi
+
+# Clean up old containers
+log_info "Cleaning up old containers..."
+docker-compose down 2>/dev/null || true
+docker ps -a | grep -E "blackflow|nginx|auth-service" | awk '{print $1}' | xargs -r docker rm -f || true
+
+# Pull latest images
+log_info "Pulling latest images..."
+docker pull ${DOCKER_USERNAME}/blackflow:prod-latest
+docker pull ${DOCKER_USERNAME}/blackflow:staging-latest
+docker pull ${DOCKER_USERNAME}/blackflow-auth:latest
+
+# Start services
+log_info "Starting services..."
+cd "${APP_DIR}"
+docker-compose up -d
+
+# Logout from Docker Hub
+docker logout
+
+log_success "Deployment completed successfully!"
+docker ps
+DEPLOY_SCRIPT
+          
+          chmod +x deploy-robust.sh
+      
+      - name: Copy deployment script to EC2
+        run: |
+          scp deploy-robust.sh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/deploy-robust-temp.sh
+      
+      - name: Prepare EC2 environment
+        run: |
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'PREPARE_SCRIPT'
+            # Ensure basic tools are installed
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
+              rm get-docker.sh
+            fi
+            
+            if ! command -v docker-compose >/dev/null 2>&1; then
+              echo "Installing Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+            
+            if ! command -v git >/dev/null 2>&1; then
+              echo "Installing Git..."
+              sudo apt-get update && sudo apt-get install -y git
+            fi
+            
+            # Ensure Docker service is running
+            sudo systemctl start docker || true
+            sudo systemctl enable docker || true
+            
+            # Create app directory if it doesn't exist
+            mkdir -p ~/app/scripts/deploy
+            
+            # Move deployment script to proper location
+            mv ~/deploy-robust-temp.sh ~/app/scripts/deploy/deploy-robust.sh
+            chmod +x ~/app/scripts/deploy/deploy-robust.sh
+          PREPARE_SCRIPT
+      
+      - name: Create Docker Compose file on EC2
+        run: |
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'COMPOSE_SCRIPT'
+            cd ~/app
+            
+            cat > docker-compose.yml << 'EOF'
+version: '3'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - blackflow-prod
+      - blackflow-staging
+      - auth-service
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  blackflow-prod:
+    image: ${{ secrets.DOCKER_USERNAME }}/blackflow:prod-latest
+    container_name: blackflow-prod
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - API_URL=${{ secrets.PROD_API_URL }}
+      - AUTH_SECRET=${{ secrets.PROD_AUTH_SECRET }}
+      - DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+    networks:
+      - frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  blackflow-staging:
+    image: ${{ secrets.DOCKER_USERNAME }}/blackflow:staging-latest
+    container_name: blackflow-staging
+    ports:
+      - "3002:3000"
+    environment:
+      - NODE_ENV=staging
+      - API_URL=${{ secrets.STAGING_API_URL }}
+      - AUTH_SECRET=${{ secrets.STAGING_AUTH_SECRET }}
+      - DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}
+    networks:
+      - frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  auth-service:
+    image: ${{ secrets.DOCKER_USERNAME }}/blackflow-auth:latest
+    container_name: auth-service
+    expose:
+      - "8080"
+    networks:
+      - backend
+    restart: unless-stopped
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+EOF
+          COMPOSE_SCRIPT
+      
+      - name: Create Nginx configuration on EC2
+        run: |
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'NGINX_SCRIPT'
+            cd ~/app
+            mkdir -p nginx/conf.d
+            
+            # Create main nginx.conf
+            cat > nginx/nginx.conf << 'EOF'
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log notice;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log /var/log/nginx/access.log main;
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 65;
+    types_hash_max_size 4096;
+    include /etc/nginx/conf.d/*.conf;
+}
+EOF
+            
+            # Create server blocks
+            cat > nginx/conf.d/default.conf << 'EOF'
+server {
+    listen 80;
+    server_name ${{ secrets.DOMAIN_NAME }};
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${{ secrets.DOMAIN_NAME }};
     
-    - name: Verify deployments
-      run: |
-        echo "Deployments completed. Verifying health endpoints..."
-        sleep 15
-        curl -k https://${{ secrets.DOMAIN_NAME }}/api/health || echo "Could not reach production health endpoint"
-        curl -k https://staging.${{ secrets.DOMAIN_NAME }}/api/health || echo "Could not reach staging health endpoint"
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    
+    location / {
+        proxy_pass http://blackflow-prod:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+    
+    location /api/auth/ {
+        proxy_pass http://auth-service:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+server {
+    listen 80;
+    server_name staging.${{ secrets.DOMAIN_NAME }};
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name staging.${{ secrets.DOMAIN_NAME }};
+    
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    
+    location / {
+        proxy_pass http://blackflow-staging:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+    
+    location /api/auth/ {
+        proxy_pass http://auth-service:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+EOF
+          NGINX_SCRIPT
+      
+      - name: Run robust deployment
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+        run: |
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            "cd ~/app && \
+             DOMAIN_NAME='${{ secrets.DOMAIN_NAME }}' \
+             DOCKER_USERNAME='$DOCKER_USERNAME' \
+             DOCKER_TOKEN='$DOCKER_TOKEN' \
+             ./scripts/deploy/deploy-robust.sh"
+      
+      - name: Verify deployment
+        run: |
+          echo "Waiting for services to stabilize..."
+          sleep 20 -I https://staging.${{ secrets.DOMAIN_NAME }}/api/health || echo "External staging check failed (may need DNS setup)"
+      
+      - name: Post-deployment summary
+        if: always()
+        run: |
+          echo ""
+          echo "======================================"
+          echo "Deployment Summary"
+          echo "======================================"
+          echo "Production: https://${{ secrets.DOMAIN_NAME }}"
+          echo "Staging: https://staging.${{ secrets.DOMAIN_NAME }}"
+          echo ""
+          echo "To monitor logs:"
+          echo "  ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}"
+          echo "  docker logs -f blackflow-prod"
+          echo "  docker logs -f blackflow-staging"
+          echo "  docker logs -f nginx"
+          echo ""
+          
+          echo "Checking services on EC2..."
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} 'docker ps'
+          
+          echo "Testing health endpoints..."
+          
+          # Test internal endpoints first
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'HEALTH_CHECK'
+            echo "Testing internal health endpoints..."
+            
+            # Production health
+            if curl -sf http://localhost:3001/api/health; then
+              echo "✓ Production service is healthy"
+            else
+              echo "✗ Production service health check failed"
+            fi
+            
+            # Staging health
+            if curl -sf http://localhost:3002/api/health; then
+              echo "✓ Staging service is healthy"
+            else
+              echo "✗ Staging service health check failed"
+            fi
+            
+            # Check nginx
+            if docker exec nginx nginx -t 2>/dev/null; then
+              echo "✓ Nginx configuration is valid"
+            else
+                  echo "✗ Nginx configuration error"
+               fi
+          HEALTH_CHECK
+             
+          # Test exter   nal endpoints if available
+          echo ""
+          echo "Testing external endpoints..."
+          curl -k -I https://${{ secrets.DOMAIN_NAME }}/api/health || echo "External production check failed (may need DNS setup)"
+          curl -k

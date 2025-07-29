@@ -6,9 +6,11 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint --dir src"
+    "lint": "next lint --dir src",
+    "test": "echo \"No tests available yet\""
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.562.0",
     "framer-motion": "^12.12.2",
     "motion": "^12.12.2",
     "motion-plus": "^0.1.9",

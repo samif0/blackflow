@@ -1,0 +1,8 @@
+{
+  "name": "infra",
+  "private": true,
+  "dependencies": {
+    "aws-cdk-lib": "^2.139.0",
+    "constructs": "^10.2.118"
+  }
+}

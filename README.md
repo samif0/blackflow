@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Blackflow
 
-## Getting Started
+This repository contains the Next.js frontend and a small Go based authentication service.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20+
+- Go 1.21+ (optional if running the auth service via Docker)
+- Docker with Compose (for containerised workflow)
+
+## Running locally
+
+Install dependencies and start the dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The application will be available at <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Auth service
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To run the Go auth service directly:
 
-## Learn More
+```bash
+cd services/auth-service
+go run main.go
+```
 
-To learn more about Next.js, take a look at the following resources:
+It exposes `/api/auth/login` and `/api/auth/health` on port `8080`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Docker development
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+All services can be started with Docker Compose:
 
-## Deploy on Vercel
+```bash
+docker-compose up --build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This will launch:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **blackflow-dev** – Next.js dev server on `localhost:3000`
+- **auth-service** – Go service on `localhost:8080`
+- **nginx** – reverse proxy for both services
+
+## Building for production
+
+To build the production image of the Next.js app:
+
+```bash
+docker build -t blackflow .
+```
+
+Or run `docker-compose up blackflow-prod` to start the production container.
+

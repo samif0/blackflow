@@ -6,24 +6,15 @@ interface AnimatedSloganProps {
   slogans: string[];
   className?: string;
 }
-// TODO: Fix animation when slogan is changing!
- 
 export default function AnimatedSlogan({ slogans, className }: AnimatedSloganProps) {
   const [current, setCurrent] = useState(0);
-  const [animationKey, setAnimationKey] = useState(0);
-  const [isVisible, setIsVisible] = useState(true);
 
   const words = slogans[current].split(" ");
 
-  // Repeat animation every 10 seconds, cycling slogans
+  // Cycle slogans every 10 seconds and let AnimatePresence handle transitions
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsVisible(false);
-      setTimeout(() => {
-        setAnimationKey((k) => k + 1);
-        setCurrent((c) => (c + 1) % slogans.length);
-        setIsVisible(true);
-      }, 500); // Wait for exit animation to complete
+      setCurrent((c) => (c + 1) % slogans.length);
     }, 10000);
 
     return () => clearInterval(interval);
@@ -77,30 +68,28 @@ export default function AnimatedSlogan({ slogans, className }: AnimatedSloganPro
   return (
     <div className={`text-center ${className || ""}`}>
       <AnimatePresence mode="wait">
-        {isVisible && (
-          <motion.h1
-            key={animationKey}
-            className="h1"
-            variants={container}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-          >
-            {words.map((word, index) => (
-              <motion.span
-                key={`${animationKey}-${index}`}
-                variants={child}
-                style={{ 
-                  display: "inline-block", 
-                  marginRight: "0.25em",
-                  whiteSpace: "nowrap"
-                }}
-              >
-                {word}
-              </motion.span>
-            ))}
-          </motion.h1>
-        )}
+        <motion.h1
+          key={current}
+          className="h1"
+          variants={container}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+        >
+          {words.map((word, index) => (
+            <motion.span
+              key={`${current}-${index}`}
+              variants={child}
+              style={{
+                display: "inline-block",
+                marginRight: "0.25em",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {word}
+            </motion.span>
+          ))}
+        </motion.h1>
       </AnimatePresence>
     </div>
   );

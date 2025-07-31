@@ -253,9 +253,9 @@ export default function WaveRainbowButton() {
           align-items: center;
           gap: 8px;
           padding: 12px 24px;
-          background: rgba(0, 0, 0, 0.95);
+          background: rgba(255, 255, 255, 0.95);
           border-radius: 8px;
-          color: white;
+          color: black;
           font-size: 16px;
           font-weight: 500;
           backdrop-filter: blur(10px);

@@ -3,8 +3,6 @@ import BlackFlowNavbar from './BlackFlowNavbar';
 import { RedHatDisplay } from '../styles/fonts';
 import AnimatedSlogan from './AnimatedSlogan';
 
-const slogan = "We noticed you googled 'is ramen a food group?' Time to talk investing.";
-
 export default function BlackFlowHomeHeader() {
   return (
     <div className="flex flex-col min-h-screen py-5 text-white">

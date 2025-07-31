@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-export default function FinalWaveRainbowButton() {
-  const [intensity, setIntensity] = useState('normal');
+export default function WaveRainbowButton() {
+  const intensity = 'normal';
 
   return (
     <>

@@ -251,7 +251,7 @@ export default function WaveRainbowButton() {
           position: relative;
           display: flex;
           align-items: center;
-          gap: 8 px;
+          gap: 8px;
           padding: 12px 24px;
           background: rgba(0, 0, 0, 0.95);
           border-radius: 8px;

@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { RedHatDisplay } from "@/styles/fonts";
-import RgbBorder from "./WaveRainbowButton";
 import WaveRainbowButton from "./WaveRainbowButton";
 
 const navLinks = [
@@ -22,11 +21,11 @@ export default function BlackFlowNavbar() {
         duration: 0.5,
         ease: "backOut",
       }}
-      className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-black"
+      className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-900/70 backdrop-blur"
     >
       {/* Logo */}
       <div className="flex items-center space-x-2">
-        <img src={"/blackflow-logo.png"} height={35} width={35}></img>
+        <img src={"/blackflow-logo.png"} alt="Blackflow logo" height={35} width={35} />
         <span
           className={`${RedHatDisplay.className} text-white font-semibold text-3xl tracking-tight`}
         >
@@ -66,9 +65,7 @@ export default function BlackFlowNavbar() {
 
       {/* Right-side Buttons */}
       <div className="flex items-center space-x-3 text-sm">
-        <button className="px-4 py-1 border border-gray-300 rounded-md text-white hover:text-white hover:border-white">
-          Log In
-        </button>
+        <button className="px-4 py-1 rounded-md text-slate-100 hover:text-white">Log In</button>
         <WaveRainbowButton />
       </div>
     </motion.nav>

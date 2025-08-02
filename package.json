@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint --dir src"
+    "lint": "next lint --dir src",
+    "test": "npm run lint"
   },
   "dependencies": {
     "framer-motion": "^12.12.2",

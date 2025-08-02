@@ -1,0 +1,8 @@
+{
+  "name": "blackflow-infra",
+  "private": true,
+  "dependencies": {
+    "aws-cdk-lib": "^2.137.0",
+    "constructs": "^10.3.0"
+  }
+}

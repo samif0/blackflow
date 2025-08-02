@@ -54,3 +54,28 @@ docker build -t blackflow .
 
 Or run `docker-compose up blackflow-prod` to start the production container.
 
+## Infrastructure
+
+The `infra/` directory contains an AWS CDK stack that provisions a web server
+EC2 instance with an attached Elastic IP.
+
+### Deploying the stack
+
+```bash
+cd infra
+npm install
+npx cdk bootstrap   # required once per account/region
+npx cdk deploy
+```
+
+After deployment, the public IP of the server is emitted as the
+`WebServerPublicIp` CloudFormation output.
+
+### Estimated cost
+
+The stack runs a small `t3.nano` EC2 instance (about US$3.80/month in
+us-east-1) with an Elastic IP that is free while attached to a running
+instance.  This setup should remain well under US$20/month, though prices
+vary by region and additional data transfer or idle Elastic IP charges may
+apply.
+
